@@ -195,7 +195,7 @@ void saveScore() {
 void loadLeaderboard() {
     FILE *file = fopen(LEADERBOARD_FILE, "rb");
     if (file == NULL) {
-        // File doesn't exist yet, that's ok
+    
         leaderboardSize = 0;
         return;
     }
@@ -265,11 +265,7 @@ void showMenu() {
         printf("|                                                  |\n");
         printf("|       [3] Game Instructions                      |\n");
         printf("|                                                  |\n");
-        printf("|       [4] Game Speed                             |\n");
-        printf("|                                                  |\n");
-        printf("|       [5] Clear Leaderboard                      |\n");
-        printf("|                                                  |\n");
-        printf("|       [6] Exit                                   |\n");
+        printf("|       [4] Exit                                   |\n");
         printf("|                                                  |\n");
         printf("+==================================================+\n");
         
@@ -301,14 +297,6 @@ void showMenu() {
                 break;
                 
             case 4:
-            	changeGameSpeed();
-            	break;
-            
-            case 5:
-            	clearLeaderboard();
-            	break;
-            	
-            case 6:
                 system("cls");
                 printf("\n\n");
                 printf("+==================================================+\n");
@@ -324,7 +312,7 @@ void showMenu() {
                 printf("\n    Invalid choice! Press any key to try again...");
                 _getch();
         }
-    } while (choice != 6);
+    } while (choice != 4);
 }
 
 void displayInstructions() {
@@ -355,66 +343,15 @@ void displayInstructions() {
     _getch();
 }
 
-int gameSpeed = 2; // 1=Fast, 2=Normal, 3=Slow
-
-void changeGameSpeed() {
-    int choice;
-    system("cls");
-    printf("\n");
-    printf("+==================================================+\n");
-    printf("|                  GAME SPEED                      |\n");
-    printf("+==================================================+\n");
-    printf("| [1] Fast   (70ms delay)                          |\n");
-    printf("| [2] Normal (100ms delay)                         |\n");
-    printf("| [3] Slow   (130ms delay)                         |\n");
-    printf("+==================================================+\n\n");
-    printf("    Select speed [1-3]: ");
-    scanf("%d", &choice);
-    getchar();
-    
-    if (choice >= 1 && choice <= 3) {
-        gameSpeed = choice;
-        printf("\n    Game speed updated successfully!");
-    } else {
-        printf("\n    Invalid choice! Speed remains unchanged.");
-    }
-    
-    printf("\n    Press any key to continue...");
-    _getch();
-}
-
-// New function to clear leaderboard
-void clearLeaderboard() {
-    char confirm;
-    printf("\n    Are you sure you want to clear the leaderboard? (y/n): ");
-    scanf("%c", &confirm);
-    getchar();
-    
-    if (confirm == 'y' || confirm == 'Y') {
-        remove(LEADERBOARD_FILE);
-        leaderboardSize = 0;
-        printf("\n    Leaderboard cleared successfully!");
-    } else {
-        printf("\n    Operation cancelled.");
-    }
-    
-    printf("\n    Press any key to continue...");
-    _getch();
-}
-
 // Modify the run function to use the selected game speed
 void run() {
     setup();
     int delay;
     
-    // Set delay based on game speed
-    switch (gameSpeed) {
-        case 1: delay = 70; break;  // Fast
-        case 2: delay = 100; break; // Normal
-        case 3: delay = 130; break; // Slow
-        default: delay = 100;       // Default to normal
-    }
-    
+    switch (delay) {
+    	default: delay = 100;
+	}
+
     while (!gameOver) {
         draw();
         input();
