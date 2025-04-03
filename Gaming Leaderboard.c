@@ -1,214 +1,434 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <conio.h>
+#include <windows.h>
+#include <time.h>
 #include <string.h>
 
-#define maxPlayers 100
+#define WIDTH 40
+#define HEIGHT 20
+#define MAX_PLAYERS 20
+#define MAX_NAME_LENGTH 20
+#define LEADERBOARD_FILE "snake_scores.dat"
 
 typedef struct {
-    int id;
-    char name[50];
+    int x, y;
+} Point;
+
+
+typedef struct {
+    char name[MAX_NAME_LENGTH];
     int score;
-} Player;
+    time_t playTime;
+} PlayerScore;
 
-Player *players;
-int playerCount = 0;
+Point snake[100];
+int snakeLength = 1;
+Point food;
+int score = 0;
+char direction = 'd'; 
+int gameOver = 0;
+char playerName[MAX_NAME_LENGTH];
+PlayerScore leaderboard[MAX_PLAYERS];
+int leaderboardSize = 0;
 
-typedef struct HistoryNode {
-    Player player;
-    struct HistoryNode *next;
-} HistoryNode;
-
-HistoryNode *historyHead = NULL;
-
-void initializePlayers();
-void addPlayer();
-void updatePlayer();
-void deletePlayer();
-void saveLeaderboard();
+// Function prototypes 
+void gotoxy(int x, int y);
+void hideCursor();
+void showCursor();
+void setup();
+void draw();
+void input();
+void logic();
+void run();
+void getPlayerName();
+void saveScore();
 void loadLeaderboard();
-void showLeaderboard();
+void displayLeaderboard();
 void sortLeaderboard();
-Player* searchPlayer(int id);
+void displayInstructions();
+void changeGameSpeed();
+void clearLeaderboard();
 
-void initializePlayers() {
-    players = (Player *)malloc(maxPlayers * sizeof(Player));
-    if (!players) {
-        exit(EXIT_FAILURE);
-    }
+// Keep your original function implementations
+void gotoxy(int x, int y) {
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
 
-Player* searchPlayer(int id) {
-    for (int i = 0; i < playerCount; i++) {
-        if (players[i].id == id) {
-            return &players[i];
+void hideCursor() {
+    CONSOLE_CURSOR_INFO cursorInfo;
+    cursorInfo.bVisible = FALSE;
+    cursorInfo.dwSize = 1;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
+
+void showCursor() {
+    CONSOLE_CURSOR_INFO cursorInfo;
+    cursorInfo.bVisible = TRUE;
+    cursorInfo.dwSize = 25;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
+
+void setup() {
+    system("cls");
+    hideCursor();
+    srand(time(0));
+    snake[0].x = WIDTH / 2;
+    snake[0].y = HEIGHT / 2;
+    food.x = rand() % WIDTH;
+    food.y = rand() % HEIGHT;
+    score = 0;
+    snakeLength = 1;
+    direction = 'd';
+    gameOver = 0;
+}
+
+void draw() {
+    gotoxy(0, 0);
+    for (int i = 0; i < WIDTH + 2; i++) printf("#");
+    printf("\n");
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            if (x == 0) printf("#");
+            if (x == snake[0].x && y == snake[0].y) {
+                printf("O"); // Head
+            } else if (x == food.x && y == food.y) {
+                printf("F"); // Food
+            } else {
+                int isBody = 0;
+                for (int i = 1; i < snakeLength; i++) {
+                    if (snake[i].x == x && snake[i].y == y) {
+                        printf("o"); // Body
+                        isBody = 1;
+                        break;
+                    }
+                }
+                if (!isBody) printf(" ");
+            }
+            if (x == WIDTH - 1) printf("#");
+        }
+        printf("\n");
+    }
+    for (int i = 0; i < WIDTH + 2; i++) printf("#");
+    printf("\nScore: %d\n", score);
+}
+
+void input() {
+    if (_kbhit()) {
+        char key = _getch();
+        switch (key) {
+            case 'w': if (direction != 's') direction = 'w'; break;
+            case 's': if (direction != 'w') direction = 's'; break;
+            case 'a': if (direction != 'd') direction = 'a'; break;
+            case 'd': if (direction != 'a') direction = 'd'; break;
+            case 'x': gameOver = 1; break; // Exit game instantly
+            case 'p': // Pause game
+                gotoxy(0, HEIGHT + 3);
+                printf("Game Paused. Press any key to continue...");
+                _getch();
+                gotoxy(0, HEIGHT + 3);
+                printf("                                        ");
+                break;
         }
     }
-    return NULL;
 }
 
-void addPlayer() {
-    int id, score;
-    char name[50];
-    printf("\nEnter Player ID: ");
-    scanf("%d", &id);
-    if (searchPlayer(id)) {
-        printf("Player ID already exists! Use update option.\n");
-        return;
+void logic() {
+    Point prev = snake[0];
+    Point prev2;
+    for (int i = 1; i < snakeLength; i++) {
+        prev2 = snake[i];
+        snake[i] = prev;
+        prev = prev2;
     }
-    printf("Enter Player Name: ");
-    scanf("%49s", name);
-    printf("Enter Player Score: ");
-    scanf("%d", &score);
-
-    if (playerCount >= maxPlayers) {
-        printf("Maximum player limit reached!\n");
-        return;
+    switch (direction) {
+        case 'w': snake[0].y--; break;
+        case 's': snake[0].y++; break;
+        case 'a': snake[0].x--; break;
+        case 'd': snake[0].x++; break;
     }
-    players[playerCount].id = id;
-    strncpy(players[playerCount].name, name, sizeof(players[playerCount].name) - 1);
-    players[playerCount].name[sizeof(players[playerCount].name) - 1] = '\0';
-    players[playerCount].score = score;
-    playerCount++;
-    sortLeaderboard();
-    printf("\nPlayer added successfully!\n");
-}
-
-void updatePlayer() {
-    int id, newScore;
-    printf("\nEnter Player ID: ");
-    scanf("%d", &id);
-    Player *existingPlayer = searchPlayer(id);
-    if (!existingPlayer) {
-        printf("Player not found!\n");
-        return;
+    if (snake[0].x < 0 || snake[0].x >= WIDTH || snake[0].y < 0 || snake[0].y >= HEIGHT) {
+        gameOver = 1;
     }
-    printf("Enter New Score: ");
-    scanf("%d", &newScore);
-    existingPlayer->score = newScore;
-    printf("\nPlayer score updated successfully!\n");
-    sortLeaderboard();
-}
-
-void deletePlayer() {
-    int id;
-    printf("\nEnter Player ID to delete: ");
-    scanf("%d", &id);
-    int index = -1;
-    for (int i = 0; i < playerCount; i++) {
-        if (players[i].id == id) {
-            index = i;
-            break;
+    for (int i = 1; i < snakeLength; i++) {
+        if (snake[0].x == snake[i].x && snake[0].y == snake[i].y) {
+            gameOver = 1;
         }
     }
-    if (index == -1) {
-        printf("Player not found!\n");
+    if (snake[0].x == food.x && snake[0].y == food.y) {
+        score += 10;
+        snakeLength++;
+        food.x = rand() % WIDTH;
+        food.y = rand() % HEIGHT;
+    }
+}
+
+void getPlayerName() {
+    system("cls");
+    showCursor();
+    printf("Enter your name: ", MAX_NAME_LENGTH - 1);
+    fgets(playerName, MAX_NAME_LENGTH, stdin);
+    // Remove newline character
+    playerName[strcspn(playerName, "\n")] = 0;
+    hideCursor();
+}
+
+void saveScore() {
+    FILE *file = fopen(LEADERBOARD_FILE, "ab");
+    if (file == NULL) {
+        printf("Error opening leaderboard file!\n");
         return;
     }
-    for (int i = index; i < playerCount - 1; i++) {
-        players[i] = players[i + 1];
+    
+    PlayerScore newScore;
+    strcpy(newScore.name, playerName);
+    newScore.score = score;
+    newScore.playTime = time(NULL);
+    
+    fwrite(&newScore, sizeof(PlayerScore), 1, file);
+    fclose(file);
+}
+
+void loadLeaderboard() {
+    FILE *file = fopen(LEADERBOARD_FILE, "rb");
+    if (file == NULL) {
+        // File doesn't exist yet, that's ok
+        leaderboardSize = 0;
+        return;
     }
-    playerCount--;
-    printf("\nPlayer deleted successfully!\n");
+    
+    leaderboardSize = 0;
+    while (fread(&leaderboard[leaderboardSize], sizeof(PlayerScore), 1, file) && 
+           leaderboardSize < MAX_PLAYERS) {
+        leaderboardSize++;
+    }
+    
+    fclose(file);
+    sortLeaderboard();
 }
 
 void sortLeaderboard() {
-    for (int i = 0; i < playerCount - 1; i++) {
-        for (int j = i + 1; j < playerCount; j++) {
-            if (players[j].score > players[i].score) {
-                Player temp = players[i];
-                players[i] = players[j];
-                players[j] = temp;
+    for (int i = 0; i < leaderboardSize - 1; i++) {
+        for (int j = 0; j < leaderboardSize - i - 1; j++) {
+            if (leaderboard[j].score < leaderboard[j + 1].score) {
+                PlayerScore temp = leaderboard[j];
+                leaderboard[j] = leaderboard[j + 1];
+                leaderboard[j + 1] = temp;
             }
         }
     }
 }
 
-void saveLeaderboard() {
-    FILE *file = fopen("leaderboard.txt", "w");
-    if (!file) {
-        printf("\nError saving leaderboard!\n");
-        return;
-    }
-    for (int i = 0; i < playerCount; i++) {
-        fprintf(file, "%d %s %d\n", players[i].id, players[i].name, players[i].score);
-    }
-    fclose(file);
-    printf("\nLeaderboard saved successfully!\n");
-}
-
-void loadLeaderboard() {
-    FILE *file = fopen("leaderboard.txt", "r");
-    if (!file) {
-        printf("No saved leaderboard found.\n");
-        return;
-    }
-    playerCount = 0;
-    while (fscanf(file, "%d %49s %d", &players[playerCount].id, players[playerCount].name, &players[playerCount].score) != EOF) {
-        playerCount++;
-    }
-    fclose(file);
-    sortLeaderboard();
-    printf("\nLeaderboard loaded successfully!\n");
-    showLeaderboard();
-}
-
-void showLeaderboard() {
-    system("cls"); 
-    printf("\n=== Leaderboard ===\n");
-    if (playerCount == 0) {
-        printf("\nNo players in the leaderboard.\n");
-    } else {
-        for (int i = 0; i < playerCount; i++) {
-            printf("%d. %s - %d points\n", i + 1, players[i].name, players[i].score);
-        }
-    }
-    printf("===================\n");
-}
-
-int main() {
-    initializePlayers();
-    loadLeaderboard();
+void displayLeaderboard() {
+    system("cls");
+    printf("\n\n==========================================\n");
+    printf("              LEADERBOARD                 \n");
+    printf("==========================================\n");
+    printf("Rank  Player Name           Score    Date\n");
+    printf("------------------------------------------\n");
     
+    for (int i = 0; i < leaderboardSize && i < 10; i++) {
+        char dateStr[20];
+        struct tm *timeinfo = localtime(&leaderboard[i].playTime);
+        strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", timeinfo);
+        
+        printf("%-5d %-20s %-8d %s\n", 
+               i + 1, 
+               leaderboard[i].name, 
+               leaderboard[i].score,
+               dateStr);
+    }
+    
+    printf("==========================================\n");
+    printf("Press any key to continue...\n");
+    _getch();
+}
+
+void showMenu() {
     int choice;
     do {
-        printf("\n=== Leaderboard Menu ===\n");
-        printf("1. Add Player\n");
-        printf("2. Update Player Score\n");
-        printf("3. Delete Player\n");
-        printf("4. Show Leaderboard\n");
-        printf("5. Save Leaderboard\n");
-        printf("6. Load Leaderboard\n");
-        printf("7. Exit\n");
-        printf("\nEnter your choice: ");
+        system("cls");
+        printf("\n");
+        printf("+==================================================+\n");
+        printf("|                                                  |\n");
+        printf("|              >>> SNAKE MASTERS <<<               |\n");
+        printf("|                  MAIN MENU                       |\n");
+        printf("|                                                  |\n");
+        printf("+==================================================+\n");
+        printf("|                                                  |\n");
+        printf("|       [1] Play Game                              |\n");
+        printf("|                                                  |\n");
+        printf("|       [2] View Leaderboard                       |\n");
+        printf("|                                                  |\n");
+        printf("|       [3] Game Instructions                      |\n");
+        printf("|                                                  |\n");
+        printf("|       [4] Game Speed                             |\n");
+        printf("|                                                  |\n");
+        printf("|       [5] Clear Leaderboard                      |\n");
+        printf("|                                                  |\n");
+        printf("|       [6] Exit                                   |\n");
+        printf("|                                                  |\n");
+        printf("+==================================================+\n");
+        
+        // Display last game score if available
+        if (score > 0) {
+            printf("|  Your last score: %-5d                           |\n", score);
+            printf("+==================================================+\n");
+        }
+        
+        printf("\n    Enter your choice [1-5]: ");
         scanf("%d", &choice);
+        getchar(); // Clear input buffer
         
         switch (choice) {
             case 1:
-                addPlayer();
-                break;
-            case 2:
-                updatePlayer();
-                break;
-            case 3:
-            	deletePlayer();
-            	break;
-            case 4:
-                showLeaderboard();
-                break;
-            case 5:
-                saveLeaderboard();
-                break;
-            case 6:
+                getPlayerName();
+                run();
+                saveScore();
                 loadLeaderboard();
                 break;
-            case 7:
-                printf("ByeBye!\n");
-                free(players);
+                
+            case 2:
+                loadLeaderboard();
+                displayLeaderboard();
                 break;
+                
+            case 3:
+                displayInstructions();
+                break;
+                
+            case 4:
+            	changeGameSpeed();
+            	break;
+            
+            case 5:
+            	clearLeaderboard();
+            	break;
+            	
+            case 6:
+                system("cls");
+                printf("\n\n");
+                printf("+==================================================+\n");
+                printf("|                                                  |\n");
+                printf("|           Thanks for playing SNAKE!              |\n");
+                printf("|                                                  |\n");
+                printf("+==================================================+\n\n");
+                printf("            Press any key to exit...");
+                _getch();
+                break;
+                
             default:
-                printf("Invalid choice! Try again.\n");
+                printf("\n    Invalid choice! Press any key to try again...");
+                _getch();
         }
-    } while (choice != 7);
+    } while (choice != 6);
+}
+
+void displayInstructions() {
+    system("cls");
+    printf("\n");
+    printf("+==================================================+\n");
+    printf("|                                                  |\n");
+    printf("|              GAME INSTRUCTIONS                   |\n");
+    printf("|                                                  |\n");
+    printf("+==================================================+\n");
+    printf("| Controls:                                        |\n");
+    printf("| - Use W, A, S, D keys to move the snake          |\n");
+    printf("| - W: Up                                          |\n");
+    printf("| - S: Down                                        |\n");
+    printf("| - A: Left                                        |\n");
+    printf("| - D: Right                                       |\n");
+    printf("|                                                  |\n");
+    printf("| - P: Pause game                                  |\n");
+    printf("| - X: Exit game                                   |\n");
+    printf("+--------------------------------------------------+\n");
+    printf("| Rules:                                           |\n");
+    printf("| - Eat food (F) to grow and score points          |\n");
+    printf("| - Avoid hitting walls or yourself                |\n");
+    printf("| - Each food eaten scores 10 points               |\n");
+    printf("| - Game ends when you hit a wall or yourself      |\n");
+    printf("+==================================================+\n\n");
+    printf("        Press any key to return to menu...");
+    _getch();
+}
+
+int gameSpeed = 2; // 1=Fast, 2=Normal, 3=Slow
+
+void changeGameSpeed() {
+    int choice;
+    system("cls");
+    printf("\n");
+    printf("+==================================================+\n");
+    printf("|                  GAME SPEED                      |\n");
+    printf("+==================================================+\n");
+    printf("| [1] Fast   (70ms delay)                          |\n");
+    printf("| [2] Normal (100ms delay)                         |\n");
+    printf("| [3] Slow   (130ms delay)                         |\n");
+    printf("+==================================================+\n\n");
+    printf("    Select speed [1-3]: ");
+    scanf("%d", &choice);
+    getchar();
     
+    if (choice >= 1 && choice <= 3) {
+        gameSpeed = choice;
+        printf("\n    Game speed updated successfully!");
+    } else {
+        printf("\n    Invalid choice! Speed remains unchanged.");
+    }
+    
+    printf("\n    Press any key to continue...");
+    _getch();
+}
+
+// New function to clear leaderboard
+void clearLeaderboard() {
+    char confirm;
+    printf("\n    Are you sure you want to clear the leaderboard? (y/n): ");
+    scanf("%c", &confirm);
+    getchar();
+    
+    if (confirm == 'y' || confirm == 'Y') {
+        remove(LEADERBOARD_FILE);
+        leaderboardSize = 0;
+        printf("\n    Leaderboard cleared successfully!");
+    } else {
+        printf("\n    Operation cancelled.");
+    }
+    
+    printf("\n    Press any key to continue...");
+    _getch();
+}
+
+// Modify the run function to use the selected game speed
+void run() {
+    setup();
+    int delay;
+    
+    // Set delay based on game speed
+    switch (gameSpeed) {
+        case 1: delay = 70; break;  // Fast
+        case 2: delay = 100; break; // Normal
+        case 3: delay = 130; break; // Slow
+        default: delay = 100;       // Default to normal
+    }
+    
+    while (!gameOver) {
+        draw();
+        input();
+        logic();
+        Sleep(delay);
+    }
+    
+    printf("\nGame Over! Final Score: %d\n", score);
+    printf("Press any key to continue...\n");
+    _getch();
+}
+
+int main() {
+    loadLeaderboard();
+    showMenu();
     return 0;
 }
