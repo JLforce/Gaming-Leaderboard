@@ -275,7 +275,7 @@ void showMenu() {
             printf("+==================================================+\n");
         }
         
-        printf("\n    Enter your choice [1-5]: ");
+        printf("\n    Enter your choice [1-4]: ");
         scanf("%d", &choice);
         getchar(); // Clear input buffer
         
